@@ -1,52 +1,74 @@
 # EFG HR Policy QA System
 
-A simple question-answering system for HR policies. It retrieves relevant policy sections and generates answers based only on the provided HR documents.
+A simple question-answering system for HR policies. The system retrieves relevant policy sections and generates answers grounded in the provided HR documents.
+
+This project was built as part of the **EFG Applied AI Data Scientist Technical Screener**.
 
 ## Project Overview
 
-This project was developed as part of the EFG Applied AI Data Scientist technical assessment.
+The system allows a user to ask natural-language questions about the provided HR policies and receive:
 
-The system allows users to ask natural-language questions about the company's HR policies and receive:
+* A concise answer based on the policy documents
+* The document and section used as the source
+* A clear response when the policies do not contain the requested information
 
-* A concise answer based on the HR policy documents
-* The relevant policy document and section
-* A clear response when the information cannot be found in the policies
+The project uses a local retrieval-augmented generation approach, so no external LLM API or API key is required.
 
-## Architecture
-
-The system has the following components:
+## Design and Approach
 
 ### 1. Document Processing
 
-* Loads the 10 HR policy Markdown files
-* Splits each document into sections using `##` headings
-* Keeps the document title, filename, and section for source attribution
+The 10 Markdown policy documents are loaded and split into sections using their `##` headings.
+
+For each section, the system keeps:
+
+* Document ID
+* Document title
+* Section name
+* Section content
+
+Keeping this metadata makes it possible to show the source of each answer.
 
 ### 2. Embeddings
 
-* Uses `all-MiniLM-L6-v2` from Sentence Transformers
-* Converts policy sections and user questions into vector embeddings
+I used `sentence-transformers/all-MiniLM-L6-v2` to create embeddings for the policy sections and user questions.
+
+I chose this model because it is lightweight, runs locally, and is suitable for semantic similarity search on a small document collection.
 
 ### 3. Retrieval
 
-* Uses FAISS for similarity search
-* Retrieves the most relevant policy sections
-* Uses a similarity threshold to identify questions that are not covered by the policies
+FAISS is used to search the policy embeddings and retrieve the most relevant sections.
+
+A distance threshold is applied so that questions that are sufficiently different from the available policies can be treated as unanswerable instead of forcing the system to return an unrelated document.
 
 ### 4. Answer Generation
 
-* Uses the local `google/flan-t5-small` model
-* Generates answers using the retrieved policy content
+The retrieved policy content is passed to `google/flan-t5-small`.
+
+The prompt instructs the model to:
+
+* Use only the retrieved policy content
+* Give a short and direct answer
+* Avoid adding information not stated in the policy
+* Prefer the general/default rule unless the question asks about a specific condition
 
 ### 5. Backend
 
-* Built with FastAPI
-* Provides a `/ask` endpoint for questions
+The backend is implemented using FastAPI.
+
+The main endpoint is:
+
+```text
+POST /ask
+```
+
+It accepts a natural-language question and returns the generated answer together with the relevant source information.
 
 ### 6. Frontend
 
-* Built with Streamlit
-* Provides a simple interface for asking questions and viewing answers and sources
+The frontend is implemented using Streamlit.
+
+It sends the user's question to the FastAPI backend and displays the answer and its source.
 
 ## Project Structure
 
@@ -88,11 +110,20 @@ EFG-Assesment/
 
 The application uses local models and does not require an OpenAI API key.
 
+## Models
+
+The project uses the following Hugging Face models:
+
+* Embeddings: `sentence-transformers/all-MiniLM-L6-v2`
+* Answer generation: `google/flan-t5-small`
+
+The models are downloaded automatically by the Python libraries on first run and are cached locally. Model weights are not included in this repository.
+
 ## Installation
 
 Create and activate a virtual environment:
 
-```bash
+```powershell
 python -m venv venv
 ```
 
@@ -104,9 +135,11 @@ venv\Scripts\activate
 
 Install the dependencies:
 
-```bash
+```powershell
 pip install -r requirements.txt
 ```
+
+The first run will download the required Hugging Face models automatically.
 
 ## Running the Backend
 
@@ -166,26 +199,63 @@ Example response:
 
 ## Handling Unanswerable Questions
 
-If a question is not covered by the HR policy documents, the system returns:
+Handling questions outside the document set is an important part of the system.
+
+If the similarity search does not find a sufficiently relevant policy section, the system returns:
 
 ```text
 I couldn't find this information in the HR policies.
 ```
 
-No unrelated policy source is returned for an unanswerable question.
+The system does not return an unrelated policy source for an unanswerable question.
+
+An example is included in `sample_qa.md`.
 
 ## Source Attribution
 
-Each answerable response includes the most relevant source document and section used to answer the question.
+For answerable questions, the API returns the most relevant policy document and section used for the answer.
 
-This allows users to verify where the answer came from and keeps the generated response grounded in the provided HR policies.
+This allows the user to verify the source of the response.
 
-## Sample Questions
+## Testing
 
-See `sample_qa.md` for example questions and expected answers, including an unanswerable question.
+The system was manually tested with:
+
+* Answerable questions from different HR policies
+* Questions requiring specific policy conditions
+* An unanswerable question outside the provided policy set
+* The FastAPI `/ask` endpoint
+* The Streamlit frontend
+
+Example test cases and their outputs are included in `sample_qa.md`.
+
+## Known Limitations
+
+* The current system uses a small local language model, so generated answers may be less capable than answers from larger models.
+* Retrieval currently uses a simple FAISS similarity search with a fixed distance threshold.
+* The answer generation step currently uses the most relevant retrieved policy section rather than combining multiple sections.
+* The current implementation is designed for a small static document collection and does not include a persistent vector database.
+* Model loading happens when the backend starts, so the first startup can take some time while models are loaded.
+* The current frontend is intentionally simple and focuses on functionality rather than visual design.
+
+## What I Would Improve With More Time
+
+With more development time, I would:
+
+* Evaluate retrieval quality systematically using a larger set of labelled questions.
+* Compare different embedding models and tune the retrieval threshold based on validation results.
+* Improve multi-section retrieval for questions that require information from more than one policy section.
+* Add automated tests for the API, retrieval logic, and unanswerable-question handling.
+* Add document-level and answer-level evaluation metrics.
+* Improve the frontend with clearer source presentation and loading/error states.
+* Add persistent indexing so embeddings do not need to be rebuilt every time the backend starts.
 
 ## AI Assistance
 
-AI-assisted development was used during the implementation of this project for coding support, debugging, documentation, and development guidance.
+AI assistants were used during development for coding support, debugging, documentation, and development guidance.
 
-The final implementation, testing, and validation were reviewed and performed as part of the project development process.
+The implementation was tested and validated during development, and the final project structure and behavior were reviewed before submission.
+
+## Sample Questions
+
+See `sample_qa.md` for 5 example questions, their answers, source documents, and an unanswerable question.
